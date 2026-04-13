@@ -7,6 +7,8 @@ const ratelimit = new Ratelimit({
   limiter: Ratelimit.slidingWindow(10, "10 s"),
 });
 
+const IS_DEMO_MODE = process.env.NODE_ENV === "production";
+
 const WAF_RULES: Record<string, RegExp[]> = {
   execute_bash: [/rm\s+-rf/i, /\bwget\b/, /\bcurl\b/, /\bchmod\b/, /\bsudo\b/, />\s*\/dev\/null/],
   sql_query: [/DROP\s+TABLE/i, /DELETE\s+FROM/i, /TRUNCATE\s+TABLE/i, /DROP\s+DATABASE/i, /;\s*--/],
@@ -43,6 +45,18 @@ export async function proxy(req: NextRequest, event: NextFetchEvent) {
 
   if (req.method !== "POST") {
     return NextResponse.next();
+  }
+
+  // In production, require a secret token to prevent external abuse
+  if (IS_DEMO_MODE) {
+    const token = req.headers.get("x-sentinel-demo");
+    const secret = process.env.SENTINEL_DEMO_SECRET;
+    if (!secret || token !== secret) {
+      return NextResponse.json(
+        { error: "FORBIDDEN", message: "Invalid or missing token." },
+        { status: 403 }
+      );
+    }
   }
 
   const ip = req.headers.get("x-forwarded-for")?.split(",")[0].trim() ?? "127.0.0.1";
@@ -165,35 +179,47 @@ export async function proxy(req: NextRequest, event: NextFetchEvent) {
   }
 
   if (parsedArguments !== undefined) {
-    const abort = new AbortController();
-    const timeout = setTimeout(() => abort.abort(), 10000);
-
     let l3Safe = false;
     let l3Reason = "Level 3 evaluator timed out or failed";
 
-    try {
-      const l3Res = await fetch("http://localhost:8001/evaluate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ payload: parsedArguments }),
-        signal: abort.signal,
-      });
-
-      if (!l3Res.ok) {
-        // 500/502 from evaluator — fail closed
+    if (IS_DEMO_MODE) {
+      // Demo mode: simulate LLM evaluation without calling the Python service
+      const argsStr = JSON.stringify(parsedArguments).toLowerCase();
+      if (argsStr.includes("base64") || argsStr.includes(" sh")) {
         l3Safe = false;
-        l3Reason = `Level 3 evaluator returned HTTP ${l3Res.status} — failing closed`;
+        l3Reason = "DEMO MODE: Detected potential obfuscation (base64/sh) - Agentic Evaluator simulated.";
       } else {
-        const result = await l3Res.json() as { safe: boolean; reason: string };
-        l3Safe = result.safe;
-        l3Reason = result.reason;
+        l3Safe = true;
+        l3Reason = "DEMO MODE: No threats detected - Agentic Evaluator simulated.";
       }
-    } catch {
-      // timeout or network error — fail closed
-      l3Safe = false;
-      l3Reason = "Level 3 evaluator timed out — failing closed";
-    } finally {
-      clearTimeout(timeout);
+    } else {
+      const abort = new AbortController();
+      const timeout = setTimeout(() => abort.abort(), 10000);
+
+      try {
+        const l3Res = await fetch("http://localhost:8001/evaluate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ payload: parsedArguments }),
+          signal: abort.signal,
+        });
+
+        if (!l3Res.ok) {
+          // 500/502 from evaluator — fail closed
+          l3Safe = false;
+          l3Reason = `Level 3 evaluator returned HTTP ${l3Res.status} — failing closed`;
+        } else {
+          const result = await l3Res.json() as { safe: boolean; reason: string };
+          l3Safe = result.safe;
+          l3Reason = result.reason;
+        }
+      } catch {
+        // timeout or network error — fail closed
+        l3Safe = false;
+        l3Reason = "Level 3 evaluator timed out — failing closed";
+      } finally {
+        clearTimeout(timeout);
+      }
     }
 
     if (!l3Safe) {
