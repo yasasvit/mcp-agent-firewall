@@ -49,8 +49,8 @@ export async function proxy(req: NextRequest, event: NextFetchEvent) {
 
   // In production, require a secret token to prevent external abuse
   if (IS_DEMO_MODE) {
-    const token = req.headers.get("x-sentinel-demo");
-    const secret = process.env.SENTINEL_DEMO_SECRET;
+    const token = req.headers.get("x-sentinel-demo") ?? "";
+    const secret = process.env.SENTINEL_DEMO_SECRET || "";
     if (!secret || token !== secret) {
       return NextResponse.json(
         { error: "FORBIDDEN", message: "Invalid or missing token." },
@@ -132,7 +132,8 @@ export async function proxy(req: NextRequest, event: NextFetchEvent) {
   let parsedArguments: unknown = undefined;
   const wafPatterns = WAF_RULES[toolName];
   if (wafPatterns) {
-    let body: Record<string, unknown>;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let body: Record<string, any>;
     try {
       body = await req.clone().json();
     } catch {
