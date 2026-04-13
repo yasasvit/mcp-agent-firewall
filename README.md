@@ -4,9 +4,13 @@
 
 ---
 
-## The Problem
+## ⚠️ The Problem
 
-> AI Agents using MCP can invoke real-world tools — executing shell commands, querying databases, reading files — creating an attack surface traditional WAFs are blind to. Conventional firewalls inspect HTTP signatures, but have no understanding of tool-call intent: a prompt injection disguised as a natural language query, or a destructive command buried in a base64-encoded argument, passes right through. A single manipulated agent can exfiltrate data or compromise infrastructure with one API call.
+AI Agents using MCP create a massive new attack surface that traditional Web Application Firewalls (WAFs) are blind to.
+
+- **Tool-Call Vulnerability:** Agents can invoke real-world tools, allowing them to execute shell scripts, query databases, or read local files.
+- **The Intent Gap:** Conventional firewalls inspect HTTP signatures but have no understanding of tool-call intent.
+- **Evasion Tactics:** Prompt injections disguised as natural language or destructive commands buried in Base64 bypass standard filters, leading to potential data exfiltration or system compromise.
 
 ---
 
