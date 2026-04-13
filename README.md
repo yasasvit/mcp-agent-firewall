@@ -1,6 +1,6 @@
 # Sentinel: AI Agent Security Gateway
 
-![Dashboard Image](./public/dashboard.png)
+![Dashboard Image](https://raw.githubusercontent.com/yasasvit/mcp-agent-firewall/main/public/dashboard.png)
 
 ---
 
