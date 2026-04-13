@@ -1,36 +1,98 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Sentinel: AI Agent Security Gateway
 
-## Getting Started
+![Dashboard Image](./public/dashboard.png)
 
-First, run the development server:
+---
+
+## The Problem
+
+> AI Agents using MCP can invoke real-world tools — executing shell commands, querying databases, reading files — creating an attack surface traditional WAFs are blind to. Conventional firewalls inspect HTTP signatures, but have no understanding of tool-call intent: a prompt injection disguised as a natural language query, or a destructive command buried in a base64-encoded argument, passes right through. A single manipulated agent can exfiltrate data or compromise infrastructure with one API call.
+
+---
+
+### 🛡️ The Solution: Defense-in-Depth
+
+- **Level 1 — Rate Limiting:** Per-IP sliding window enforced at the edge via Upstash Redis. Blocks spam and looping agents before any payload inspection occurs.
+- **Level 2 — Deterministic WAF:** Sub-10ms regex inspection of `params.arguments` at the edge. Per-tool pattern dictionaries catch path traversal, shell injection, SQL destruction, and sandbox escapes deterministically.
+- **Level 3 — Semantic Evaluator:** A Python LLM sidecar (FastAPI + GPT-4o-mini) catches what regex cannot — prompt injections, base64-obfuscated payloads, and novel evasion. Implements a circuit breaker: fails closed on timeout or service error.
+
+---
+
+## Architecture
+
+```mermaid
+graph TD
+A[AI Agent / LLM] -->|Tool Call Payload| B(Next.js Edge Proxy)
+subgraph Level 1 & 2: Edge WAF
+B --> C{Rate Limiter}
+C -->|Spam| D[429 Blocked]
+C -->|Pass| E{Regex Deep Inspection}
+E -->|Matches Pattern| F[403 Blocked]
+end
+subgraph Level 3: Semantic WAF
+E -->|Passes Regex| G{Python LLM Evaluator}
+G -->|Detects Evasion| H[403 Blocked]
+end
+G -->|Deemed Safe| I[(Target System / DB)]
+B -.->|Async Log| J[(Upstash Redis)]
+J -.-> K[Next.js SOC Dashboard]
+```
+
+---
+
+## Tech Stack
+
+- **Next.js 15** — App Router with Edge Middleware for zero-cold-start enforcement at the network boundary
+- **Python + FastAPI** — Lightweight async microservice hosting the Level 3 LLM evaluator
+- **Upstash Redis** — Serverless Redis for rate limiting, tool blocklisting, and log persistence
+- **OpenAI GPT-4o-mini** — LLM backend for semantic payload analysis (swappable with any OpenAI-compatible model)
+
+---
+
+## Quick Start
+
+### Prerequisites
+- Node.js 18+
+- Python 3.10+
+- An [Upstash](https://upstash.com) Redis database (free tier)
+- An [OpenAI](https://platform.openai.com) API key
+
+### 1. Clone and install
+
+```bash
+git clone https://github.com/YOUR_USERNAME/mcp-agent-firewall.git
+cd mcp-agent-firewall
+npm install
+```
+
+### 2. Configure environment variables
+
+```bash
+# Root — Next.js app
+cp .env.example .env.local
+# Fill in UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN
+
+# Python evaluator
+cp firewall-llm/.env.example firewall-llm/.env
+# Fill in OPENAI_API_KEY
+```
+
+### 3. Start the Next.js app
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+# → http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 4. Start the Python evaluator
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+cd firewall-llm
+python -m venv venv
+source venv/bin/activate   # Windows: venv\Scripts\activate
+pip install -r requirements.txt
+uvicorn main:app --port 8001 --reload
+# → http://localhost:8001
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Both services must be running for all three security layers to be active. The dashboard is available at [http://localhost:3000](http://localhost:3000).
