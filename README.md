@@ -14,7 +14,7 @@ AI Agents using MCP create a massive new attack surface that traditional Web App
 
 ---
 
-### 🛡️ The Solution: Defense-in-Depth
+## 🛡️ The Solution: Defense-in-Depth
 
 - **Level 1 — Rate Limiting:** Per-IP sliding window enforced at the edge via Upstash Redis. Blocks spam and looping agents before any payload inspection occurs.
 - **Level 2 — Deterministic WAF:** Sub-10ms regex inspection of `params.arguments` at the edge. Per-tool pattern dictionaries catch path traversal, shell injection, SQL destruction, and sandbox escapes deterministically.
