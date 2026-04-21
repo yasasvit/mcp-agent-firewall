@@ -38,6 +38,8 @@ You must respond ONLY with a JSON object in this exact format — no markdown, n
 
 
 class EvaluateRequest(BaseModel):
+    model_config = {"extra": "ignore"}
+
     payload: dict
 
 

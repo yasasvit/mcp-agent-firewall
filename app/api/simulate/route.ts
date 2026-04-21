@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { NextRequest, NextResponse } from "next/server";
 
 const WAF_RULES: Record<string, RegExp[]> = {
@@ -32,7 +34,7 @@ const SCENARIOS: Record<Scenario, { toolName: string; arguments: Record<string, 
 };
 
 export async function POST(req: NextRequest) {
-  const { scenario } = (await req.json()) as { scenario: string };
+  const { scenario } = (await req.json()) as { scenario: string; cache_buster?: number };
   const s = SCENARIOS[scenario as Scenario];
   if (!s) {
     return NextResponse.json({ error: "Unknown scenario" }, { status: 400 });

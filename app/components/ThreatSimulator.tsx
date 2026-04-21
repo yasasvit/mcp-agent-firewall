@@ -61,7 +61,7 @@ export function ThreatSimulator() {
       const res = await fetch("/api/simulate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ scenario }),
+        body: JSON.stringify({ scenario, cache_buster: Date.now() }),
       });
       const data = (await res.json()) as {
         allowed: boolean;
