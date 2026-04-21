@@ -6,11 +6,15 @@ from fastapi import FastAPI, HTTPException
 from openai import OpenAI
 from pydantic import BaseModel
 
-load_dotenv()
+if not os.getenv("VERCEL"):
+    load_dotenv()
 
 app = FastAPI(title="Sentinel Level 3 — LLM Argument Firewall")
 
-client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+api_key = os.getenv("OPENAI_API_KEY")
+print(f"System Check: OpenAI Key found? {'YES' if api_key else 'NO'}", flush=True)
+
+client = OpenAI(api_key=api_key) if api_key else None
 
 SYSTEM_PROMPT = """You are a strict cybersecurity analyst embedded in an AI agent firewall.
 
@@ -44,6 +48,12 @@ class EvaluateResponse(BaseModel):
 
 @app.post("/evaluate", response_model=EvaluateResponse)
 async def evaluate(request: EvaluateRequest) -> EvaluateResponse:
+    if client is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Configuration Error: OPENAI_API_KEY is not set.",
+        )
+
     payload_str = json.dumps(request.payload, indent=2)
 
     response = client.chat.completions.create(

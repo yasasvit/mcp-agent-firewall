@@ -84,9 +84,13 @@ export async function POST(req: NextRequest) {
       signal: abort.signal,
     });
     if (!l3Res.ok) {
+      const blockReason =
+        l3Res.status === 503
+          ? "Configuration Error: OPENAI_API_KEY not set"
+          : "Level 3 Agentic Evaluator";
       return NextResponse.json({
         allowed: false,
-        blockReason: "Level 3 Agentic Evaluator",
+        blockReason,
         latencyMs: Date.now() - start,
       });
     }
