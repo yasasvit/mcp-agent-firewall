@@ -110,10 +110,10 @@ function buildLogEntry(
 }
 
 export async function POST(req: NextRequest) {
-  const { scenario } = (await req.json()) as { scenario: string; cache_buster?: number };
+  const { scenario, fake_ip } = (await req.json()) as { scenario: string; cache_buster?: number; fake_ip?: string };
   const s = SCENARIOS[scenario as Scenario];
-  const realIp = getRealIp(req);
-  const maskedIp = maskIp(realIp);
+  const realIp = getRealIp(req);          // used for rate limiting
+  const maskedIp = maskIp(fake_ip ?? realIp); // fake_ip for seeding, real IP for live traffic
   if (!s) {
     return NextResponse.json({ error: "Unknown scenario" }, { status: 400, ...NO_CACHE });
   }

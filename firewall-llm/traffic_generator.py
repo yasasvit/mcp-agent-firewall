@@ -3,7 +3,7 @@ import time
 
 import requests
 
-URL = "https://mcp-agent-firewall-rdc2plx8i-yasasvits-projects.vercel.app/api/simulate"
+URL = "https://mcp-agent-firewall-nz8642p24-yasasvits-projects.vercel.app/api/simulate"
 
 FAKE_IPS = [
     "104.28.14.2",
@@ -30,7 +30,7 @@ for i in range(1, 16):
     scenario_id, scenario_label = random.choice(SCENARIOS)
 
     cache_buster = int(time.time() * 1000)
-    payload = {"scenario": scenario_id, "cache_buster": cache_buster}
+    payload = {"scenario": scenario_id, "cache_buster": cache_buster, "fake_ip": ip}
     headers = {
         "Content-Type": "application/json",
         "X-Forwarded-For": ip,
