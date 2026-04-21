@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { ThreatSimulator } from "./components/ThreatSimulator";
 
 type LogStatus = "Allowed" | "Blocked" | "RateLimited";
 
@@ -224,6 +225,9 @@ export default function Dashboard() {
             );
           })}
         </div>
+
+        {/* Live Threat Simulator */}
+        <ThreatSimulator />
 
         {/* Control Bar */}
         <div className="flex items-center gap-3">
