@@ -88,6 +88,12 @@ function maskIp(ip: string): string {
   return ip;
 }
 
+const NO_CACHE = { headers: { "Cache-Control": "no-store, no-cache, must-revalidate" } };
+
+function noCache(data: unknown) {
+  return NextResponse.json(data, NO_CACHE);
+}
+
 function buildLogEntry(
   toolName: string,
   status: "Allowed" | "Blocked",
@@ -109,7 +115,7 @@ export async function POST(req: NextRequest) {
   const realIp = getRealIp(req);
   const maskedIp = maskIp(realIp);
   if (!s) {
-    return NextResponse.json({ error: "Unknown scenario" }, { status: 400 });
+    return NextResponse.json({ error: "Unknown scenario" }, { status: 400, ...NO_CACHE });
   }
 
   const argsStr = JSON.stringify(s.arguments);
@@ -122,7 +128,7 @@ export async function POST(req: NextRequest) {
       if (pattern.test(argsStr)) {
         const logEntry = buildLogEntry(s.toolName, "Blocked", "Blocked by Level 2 Argument Inspection", maskedIp);
         await writeLog(logEntry);
-        return NextResponse.json({
+        return noCache({
           allowed: false,
           blockReason: "Level 2 Argument Inspection",
           latencyMs: Date.now() - start,
@@ -137,7 +143,7 @@ export async function POST(req: NextRequest) {
   if (!apiKey) {
     const logEntry = buildLogEntry(s.toolName, "Blocked", "Configuration Error: OPENAI_API_KEY not set", maskedIp);
     await writeLog(logEntry);
-    return NextResponse.json({
+    return noCache({
       allowed: false,
       blockReason: "Configuration Error: OPENAI_API_KEY not set",
       latencyMs: Date.now() - start,
@@ -171,7 +177,7 @@ export async function POST(req: NextRequest) {
     const logEntry = buildLogEntry(s.toolName, status, reason, maskedIp);
     await writeLog(logEntry);
 
-    return NextResponse.json({
+    return noCache({
       allowed: result.safe,
       blockReason: result.safe ? "" : "Level 3 Agentic Evaluator",
       latencyMs: Date.now() - start,
@@ -180,7 +186,7 @@ export async function POST(req: NextRequest) {
   } catch {
     const logEntry = buildLogEntry(s.toolName, "Blocked", "Level 3 Agentic Evaluator timed out — failing closed", maskedIp);
     await writeLog(logEntry);
-    return NextResponse.json({
+    return noCache({
       allowed: false,
       blockReason: "Level 3 Agentic Evaluator (timeout — fail closed)",
       latencyMs: Date.now() - start,
