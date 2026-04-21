@@ -4,6 +4,14 @@ import { useState } from "react";
 
 type Scenario = "safe" | "path_traversal" | "obfuscated" | "jailbreak";
 
+interface SimLogEntry {
+  timestamp: string;
+  ip: string;
+  toolName: string;
+  status: "Allowed" | "Blocked";
+  reason: string;
+}
+
 interface SimResult {
   allowed: boolean;
   blockReason: string;
@@ -47,7 +55,7 @@ const SCENARIOS: {
   },
 ];
 
-export function ThreatSimulator() {
+export function ThreatSimulator({ onSimulate }: { onSimulate?: (log: SimLogEntry) => void }) {
   const [activeScenario, setActiveScenario] = useState<Scenario | null>(null);
   const [result, setResult] = useState<SimResult | null>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
@@ -67,12 +75,14 @@ export function ThreatSimulator() {
         allowed: boolean;
         blockReason: string;
         latencyMs: number;
+        logEntry?: SimLogEntry;
         error?: string;
       };
       if (!res.ok) {
         setFetchError(data.error ?? `HTTP ${res.status}`);
       } else {
         setResult({ ...data, label });
+        if (data.logEntry) onSimulate?.(data.logEntry);
       }
     } catch {
       setFetchError("Network error — is the dev server running?");

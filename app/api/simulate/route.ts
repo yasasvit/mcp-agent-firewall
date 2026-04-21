@@ -2,6 +2,20 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
+import redis from "@/lib/redis";
+
+async function writeLog(entry: {
+  timestamp: string;
+  ip: string;
+  toolName: string;
+  status: "Allowed" | "Blocked";
+  reason: string;
+}) {
+  const pipeline = redis.pipeline();
+  pipeline.lpush("mcp:logs", JSON.stringify(entry));
+  pipeline.ltrim("mcp:logs", 0, 999);
+  await pipeline.exec();
+}
 
 const WAF_RULES: Record<string, RegExp[]> = {
   execute_bash: [/rm\s+-rf/i, /\bwget\b/, /\bcurl\b/, /\bchmod\b/, /\bsudo\b/, />\s*\/dev\/null/],
@@ -52,6 +66,20 @@ const SCENARIOS: Record<Scenario, { toolName: string; arguments: Record<string, 
   },
 };
 
+function buildLogEntry(
+  toolName: string,
+  status: "Allowed" | "Blocked",
+  reason: string
+) {
+  return {
+    timestamp: new Date().toISOString(),
+    ip: "127.0.0.1",
+    toolName,
+    status,
+    reason,
+  };
+}
+
 export async function POST(req: NextRequest) {
   const { scenario } = (await req.json()) as { scenario: string; cache_buster?: number };
   const s = SCENARIOS[scenario as Scenario];
@@ -67,10 +95,13 @@ export async function POST(req: NextRequest) {
   if (wafPatterns) {
     for (const pattern of wafPatterns) {
       if (pattern.test(argsStr)) {
+        const logEntry = buildLogEntry(s.toolName, "Blocked", "Blocked by Level 2 Argument Inspection");
+        await writeLog(logEntry);
         return NextResponse.json({
           allowed: false,
           blockReason: "Level 2 Argument Inspection",
           latencyMs: Date.now() - start,
+          logEntry,
         });
       }
     }
@@ -79,10 +110,13 @@ export async function POST(req: NextRequest) {
   // Level 3: call OpenAI directly (works locally and on Vercel)
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
+    const logEntry = buildLogEntry(s.toolName, "Blocked", "Configuration Error: OPENAI_API_KEY not set");
+    await writeLog(logEntry);
     return NextResponse.json({
       allowed: false,
       blockReason: "Configuration Error: OPENAI_API_KEY not set",
       latencyMs: Date.now() - start,
+      logEntry,
     });
   }
 
@@ -105,16 +139,27 @@ export async function POST(req: NextRequest) {
     const raw = response.choices[0].message.content?.trim() ?? "";
     const result = JSON.parse(raw) as { safe: boolean; reason: string };
 
+    const status = result.safe ? "Allowed" : "Blocked";
+    const reason = result.safe
+      ? "Tool passed all checks"
+      : `Blocked by Level 3 Agentic Evaluator: ${result.reason}`;
+    const logEntry = buildLogEntry(s.toolName, status, reason);
+    await writeLog(logEntry);
+
     return NextResponse.json({
       allowed: result.safe,
       blockReason: result.safe ? "" : "Level 3 Agentic Evaluator",
       latencyMs: Date.now() - start,
+      logEntry,
     });
   } catch {
+    const logEntry = buildLogEntry(s.toolName, "Blocked", "Level 3 Agentic Evaluator timed out — failing closed");
+    await writeLog(logEntry);
     return NextResponse.json({
       allowed: false,
       blockReason: "Level 3 Agentic Evaluator (timeout — fail closed)",
       latencyMs: Date.now() - start,
+      logEntry,
     });
   }
 }

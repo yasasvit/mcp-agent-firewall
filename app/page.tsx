@@ -138,6 +138,7 @@ export default function Dashboard() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [selectedLog, setSelectedLog] = useState<LogEntry | null>(null);
+  const [flashTimestamp, setFlashTimestamp] = useState<string | null>(null);
 
   const fetchLogs = useCallback(async () => {
     setLoading(true);
@@ -173,6 +174,12 @@ export default function Dashboard() {
     const id = setInterval(pollLogs, 3000);
     return () => clearInterval(id);
   }, [pollLogs]);
+
+  const handleSimulate = useCallback((log: LogEntry) => {
+    setLogs((prev) => [log, ...prev]);
+    setFlashTimestamp(log.timestamp);
+    setTimeout(() => setFlashTimestamp(null), 2000);
+  }, []);
 
   return (
     <main className="min-h-screen bg-gray-950 text-gray-100 p-6 font-[family-name:var(--font-geist-sans)]">
@@ -227,7 +234,7 @@ export default function Dashboard() {
         </div>
 
         {/* Live Threat Simulator */}
-        <ThreatSimulator />
+        <ThreatSimulator onSimulate={handleSimulate} />
 
         {/* Control Bar */}
         <div className="flex items-center gap-3">
@@ -299,7 +306,11 @@ export default function Dashboard() {
                         <tr
                           key={i}
                           onClick={() => setSelectedLog(log)}
-                          className="cursor-pointer hover:bg-slate-800 transition-colors"
+                          className={`cursor-pointer transition-colors ${
+                            log.timestamp === flashTimestamp
+                              ? "sentinel-new-row"
+                              : "hover:bg-slate-800"
+                          }`}
                         >
                           <td className="px-4 py-3 text-gray-300 whitespace-nowrap font-[family-name:var(--font-geist-mono)] text-xs">
                             {timeAgo(log.timestamp)}
