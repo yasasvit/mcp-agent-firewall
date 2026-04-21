@@ -2,9 +2,32 @@ import json
 import os
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from openai import OpenAI
 from pydantic import BaseModel
+
+
+def get_real_ip(request: Request) -> str:
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    real_ip = request.headers.get("x-real-ip")
+    if real_ip:
+        return real_ip.strip()
+    return request.client.host if request.client else "unknown"
+
+
+def mask_ip(ip_address: str) -> str:
+    if ip_address in ("127.0.0.1", "localhost"):
+        return ip_address
+    if "." in ip_address:
+        parts = ip_address.split(".")
+        return f"{parts[0]}.{parts[1]}.***.***"
+    if ":" in ip_address:
+        parts = ip_address.split(":")
+        half = len(parts) // 2
+        return ":".join(parts[:half]) + ":" + ":".join("***" for _ in parts[half:])
+    return ip_address
 
 if not os.getenv("VERCEL"):
     load_dotenv()

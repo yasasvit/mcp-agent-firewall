@@ -66,14 +66,37 @@ const SCENARIOS: Record<Scenario, { toolName: string; arguments: Record<string, 
   },
 };
 
+function getRealIp(req: NextRequest): string {
+  const forwarded = req.headers.get("x-forwarded-for");
+  if (forwarded) return forwarded.split(",")[0].trim();
+  const realIp = req.headers.get("x-real-ip");
+  if (realIp) return realIp.trim();
+  return "127.0.0.1";
+}
+
+function maskIp(ip: string): string {
+  if (ip === "127.0.0.1" || ip === "localhost") return ip;
+  if (ip.includes(".")) {
+    const parts = ip.split(".");
+    return `${parts[0]}.${parts[1]}.***.***`;
+  }
+  if (ip.includes(":")) {
+    const parts = ip.split(":");
+    const half = Math.floor(parts.length / 2);
+    return [...parts.slice(0, half), ...parts.slice(half).map(() => "***")].join(":");
+  }
+  return ip;
+}
+
 function buildLogEntry(
   toolName: string,
   status: "Allowed" | "Blocked",
-  reason: string
+  reason: string,
+  maskedIp: string
 ) {
   return {
     timestamp: new Date().toISOString(),
-    ip: "127.0.0.1",
+    ip: maskedIp,
     toolName,
     status,
     reason,
@@ -83,6 +106,8 @@ function buildLogEntry(
 export async function POST(req: NextRequest) {
   const { scenario } = (await req.json()) as { scenario: string; cache_buster?: number };
   const s = SCENARIOS[scenario as Scenario];
+  const realIp = getRealIp(req);
+  const maskedIp = maskIp(realIp);
   if (!s) {
     return NextResponse.json({ error: "Unknown scenario" }, { status: 400 });
   }
@@ -95,7 +120,7 @@ export async function POST(req: NextRequest) {
   if (wafPatterns) {
     for (const pattern of wafPatterns) {
       if (pattern.test(argsStr)) {
-        const logEntry = buildLogEntry(s.toolName, "Blocked", "Blocked by Level 2 Argument Inspection");
+        const logEntry = buildLogEntry(s.toolName, "Blocked", "Blocked by Level 2 Argument Inspection", maskedIp);
         await writeLog(logEntry);
         return NextResponse.json({
           allowed: false,
@@ -110,7 +135,7 @@ export async function POST(req: NextRequest) {
   // Level 3: call OpenAI directly (works locally and on Vercel)
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
-    const logEntry = buildLogEntry(s.toolName, "Blocked", "Configuration Error: OPENAI_API_KEY not set");
+    const logEntry = buildLogEntry(s.toolName, "Blocked", "Configuration Error: OPENAI_API_KEY not set", maskedIp);
     await writeLog(logEntry);
     return NextResponse.json({
       allowed: false,
@@ -143,7 +168,7 @@ export async function POST(req: NextRequest) {
     const reason = result.safe
       ? "Tool passed all checks"
       : `Blocked by Level 3 Agentic Evaluator: ${result.reason}`;
-    const logEntry = buildLogEntry(s.toolName, status, reason);
+    const logEntry = buildLogEntry(s.toolName, status, reason, maskedIp);
     await writeLog(logEntry);
 
     return NextResponse.json({
@@ -153,7 +178,7 @@ export async function POST(req: NextRequest) {
       logEntry,
     });
   } catch {
-    const logEntry = buildLogEntry(s.toolName, "Blocked", "Level 3 Agentic Evaluator timed out — failing closed");
+    const logEntry = buildLogEntry(s.toolName, "Blocked", "Level 3 Agentic Evaluator timed out — failing closed", maskedIp);
     await writeLog(logEntry);
     return NextResponse.json({
       allowed: false,
